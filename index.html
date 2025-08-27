@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dice Roller AR – Meta Quest 3S</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html,body{height:100%}
+    #xr-canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:transparent}
+    #overlay{position:fixed;inset:0;pointer-events:auto;display:flex;flex-direction:column}
+    #ui-wrap{max-width:1200px;margin:0 auto;padding:16px}
+    .dice-face{width:40px;height:40px;display:flex;justify-content:center;align-items:center;border-radius:8px;font-weight:bold;margin:5px;box-shadow:0 2px 5px rgba(0,0,0,0.2)}
+    .d4{background-color:#FF5733;color:#fff}
+    .d6{background-color:#33FF57}
+    .d8{background-color:#339CFF;color:#fff}
+    .d10{background-color:#339CFF;color:#fff}
+    .d12{background-color:#F3FF33}
+    .d20{background-color:#FF33F3;color:#fff}
+    .d100{background-color:#33FFF3}
+    .note-chip{display:inline-block;padding:2px 8px;border-radius:12px;font-size:12px;margin-left:5px}
+    .bonus{background-color:#D1FAE5;color:#065F46}
+    .malus{background-color:#FEE2E2;color:#991B1B}
+    @keyframes roll{0%{transform:rotate(0deg) scale(1)}100%{transform:rotate(360deg) scale(1)}}
+    .rolling{animation:roll .3s ease-out}
+    #headerBar{backdrop-filter:saturate(120%) blur(8px);background:rgba(17,24,39,.5)}
+    .ar-note{font-size:12px}
+    .ar-btn{border:1px solid rgba(255,255,255,.2)}
+  </style>
+</head>
+<body class="bg-gray-900 text-white">
+  <canvas id="xr-canvas"></canvas>
+
+  <div id="overlay">
+    <div id="headerBar" class="w-full sticky top-0 z-50">
+      <div class="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
+        <div class="text-sm ar-note opacity-80">Meta Quest 3S • Mixed Reality • DOM Overlay actif</div>
+        <div class="flex items-center gap-2">
+          <button id="enter-ar" class="ar-btn px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700">Enter AR</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="ui-wrap" class="w-full">
+      <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-8 text-indigo-300">Dice Roller Avancé</h1>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="bg-white text-gray-900 p-6 rounded-xl shadow">
+            <h2 class="text-xl font-semibold mb-4">Ajouter des dés</h2>
+            <div class="space-y-4">
+              <div>
+                <label class="block mb-1">Type de dé</label>
+                <select id="diceType" class="w-full p-2 border rounded">
+                  <option value="4">d4</option>
+                  <option value="6" selected>d6</option>
+                  <option value="8">d8</option>
+                  <option value="10">d10</option>
+                  <option value="12">d12</option>
+                  <option value="20">d20</option>
+                  <option value="100">d100</option>
+                </select>
+              </div>
+              <div>
+                <label class="block mb-1">Nombre</label>
+                <input id="diceCount" type="number" min="1" value="1" class="w-full p-2 border rounded">
+              </div>
+              <button id="addDice" class="w-full bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700">Ajouter au lancer</button>
+            </div>
+          </div>
+
+          <div class="bg-white text-gray-900 p-6 rounded-xl shadow">
+            <h2 class="text-xl font-semibold mb-4">Gérer les Notes</h2>
+            <div class="space-y-4">
+              <div class="flex gap-2">
+                <input id="noteName" placeholder="Nom" class="flex-1 p-2 border rounded">
+                <input id="noteValue" type="number" placeholder="Valeur" class="w-20 p-2 border rounded">
+                <button id="addNote" class="bg-green-600 text-white px-4 rounded hover:bg-green-700">+</button>
+              </div>
+              <div id="notesList" class="border rounded p-2 max-h-40 overflow-y-auto">
+                <p class="text-gray-500 text-sm italic">Aucune note créée</p>
+              </div>
+              <button id="clearNotes" class="w-full bg-gray-200 py-2 rounded hover:bg-gray-300">Effacer toutes les notes</button>
+            </div>
+          </div>
+
+          <div class="bg-white text-gray-900 p-6 rounded-xl shadow">
+            <h2 class="text-xl font-semibold mb-4">Lancer en cours</h2>
+            <div id="currentRolls" class="mb-4 min-h-20">
+              <p class="text-gray-500 italic">Aucun dé à lancer</p>
+            </div>
+            <div class="flex gap-2">
+              <button id="clearRolls" class="flex-1 bg-gray-200 py-2 rounded hover:bg-gray-300">Effacer</button>
+              <button id="rollButton" class="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700">Lancer !</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 bg-white text-gray-900 p-6 rounded-xl shadow">
+          <h2 class="text-xl font-semibold mb-4">Résultats</h2>
+          <div id="results" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h3 class="font-medium mb-2">Dernier lancer</h3>
+              <div id="lastRollResult" class="bg-gray-50 p-4 rounded">
+                <p class="text-gray-500 italic">En attente de lancer...</p>
+              </div>
+            </div>
+            <div>
+              <h3 class="font-medium mb-2">Historique</h3>
+              <div id="history" class="space-y-2 max-h-60 overflow-y-auto">
+                <p class="text-gray-500 italic">Aucun historique</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p class="text-xs opacity-60 mt-6">Conseil : sur Meta Quest, utilisez la gâchette pour confirmer l’entrée AR. Le réticule au sol apparaît via hit-test.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded',function(){
+      const diceTypeSelect=document.getElementById('diceType');
+      const diceCountInput=document.getElementById('diceCount');
+      const addDiceButton=document.getElementById('addDice');
+      const currentRollsDiv=document.getElementById('currentRolls');
+      const clearRollsButton=document.getElementById('clearRolls');
+      const rollButton=document.getElementById('rollButton');
+      const lastRollResultDiv=document.getElementById('lastRollResult');
+      const historyDiv=document.getElementById('history');
+      const noteNameInput=document.getElementById('noteName');
+      const noteValueInput=document.getElementById('noteValue');
+      const addNoteButton=document.getElementById('addNote');
+      const notesListDiv=document.getElementById('notesList');
+      const clearNotesButton=document.getElementById('clearNotes');
+      let currentRolls=[];let history=[];let selectedNotes=[];
+      let notes=JSON.parse(localStorage.getItem('diceRollerNotes'))||[{id:1,name:"Bonus de compétence",value:2},{id:2,name:"Malus de blessure",value:-1}];
+      updateNotesDisplay();
+      function saveNotes(){localStorage.setItem('diceRollerNotes',JSON.stringify(notes))}
+      function addDiceToRoll(){const type=diceTypeSelect.value;const count=parseInt(diceCountInput.value)||1;if(count<1){alert('Le nombre doit être au moins 1');return}currentRolls.push({type:parseInt(type),count,notes:[...selectedNotes]});updateCurrentRollsDisplay()}
+      function updateCurrentRollsDisplay(){if(currentRolls.length===0){currentRollsDiv.innerHTML='<p class="text-gray-500 italic">Aucun dé à lancer</p>';return}let html=currentRolls.map((roll,index)=>{const notesHtml=roll.notes.map(note=>`<span class="note-chip ${note.value>=0?'bonus':'malus'}">${note.name} ${note.value>0?'+':''}${note.value}</span>`).join('');return `<div class="flex justify-between items-center bg-gray-50 p-2 mb-2 rounded"><div><span>${roll.count}d${roll.type}</span>${notesHtml}</div><button onclick="removeRoll(${index})" class="text-red-500">×</button></div>`}).join('');currentRollsDiv.innerHTML=html}
+      window.removeRoll=function(index){currentRolls.splice(index,1);updateCurrentRollsDisplay()}
+      function clearRolls(){currentRolls=[];updateCurrentRollsDisplay()}
+      function rollAllDice(){if(currentRolls.length===0){alert("Ajoutez d'abord des dés à lancer");return}const results=currentRolls.map(roll=>{const diceRolls=[];let total=0;for(let i=0;i<roll.count;i++){const value=Math.floor(Math.random()*roll.type)+1;diceRolls.push(value);total+=value}const notesTotal=roll.notes.reduce((sum,note)=>sum+note.value,0);total+=notesTotal;return{type:roll.type,count:roll.count,diceRolls,notes:[...roll.notes],total,notesTotal}});displayResults(results);addToHistory(results);clearRolls()}
+      function displayResults(results){let html=results.map(result=>{const now=Date.now();const diceHtml=result.diceRolls.map((roll,i)=>{setTimeout(()=>{const diceEl=document.getElementById(`dice-${i}-${now}`);if(diceEl)diceEl.classList.remove('rolling')},300*i);return `<div id="dice-${i}-${now}" class="dice-face d${result.type} rolling">${roll}</div>`}).join('');const notesHtml=result.notes.map(note=>`<span class="note-chip ${note.value>=0?'bonus':'malus'}">${note.name} ${note.value>0?'+':''}${note.value}</span>`).join('');const total=result.diceRolls.reduce((a,b)=>a+b,0)+(result.notesTotal||0);return `<div class="mb-4"><div class="flex flex-wrap mb-2">${diceHtml}</div><div class="text-sm"><div>Total dés: ${result.diceRolls.reduce((a,b)=>a+b,0)}</div>${result.notes.length>0?`<div>Notes: ${notesHtml}</div>`:''}<div class="font-bold mt-1">Total: ${total}</div></div></div>`}).join('');lastRollResultDiv.innerHTML=html}
+      function addToHistory(results){const timestamp=new Date().toLocaleTimeString();const total=results.reduce((sum,r)=>sum+r.total,0);const historyEntry={timestamp,rolls:results,total};history.unshift(historyEntry);updateHistoryDisplay();localStorage.setItem('diceRollerHistory',JSON.stringify(history))}
+      function updateHistoryDisplay(){if(history.length===0){historyDiv.innerHTML='<p class="text-gray-500 italic">Aucun historique</p>';return}let html=history.map(entry=>{const rollsDesc=entry.rolls.map(r=>`${r.count}d${r.type} (${r.total})`).join(' + ');return `<div class="p-3 bg-gray-50 rounded hover:bg-gray-100"><div class="flex justify-between"><span class="text-gray-500 text-sm">${entry.timestamp}</span><span class="font-bold">${entry.total}</span></div><div class="text-sm mt-1">${rollsDesc}</div></div>`}).join('');historyDiv.innerHTML=html}
+      function addNote(){const name=noteNameInput.value.trim();const value=parseInt(noteValueInput.value)||0;if(!name){alert('Entrez un nom pour la note');return}const newNote={id:Date.now(),name,value};notes.push(newNote);updateNotesDisplay();saveNotes();noteNameInput.value='';noteValueInput.value=''}
+      function updateNotesDisplay(){if(notes.length===0){notesListDiv.innerHTML='<p class="text-gray-500 text-sm italic">Aucune note créée</p>';return}let html=notes.map(note=>{const isSelected=selectedNotes.some(n=>n.id===note.id);return `<div class="flex justify-between items-center p-2 hover:bg-gray-50 rounded"><label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" value="${note.id}" ${isSelected?'checked':''} class="note-checkbox rounded text-indigo-600"><span>${note.name}</span><span class="note-chip ${note.value>=0?'bonus':'malus'}">${note.value>0?'+':''}${note.value}</span></label><button onclick="deleteNote(${note.id})" class="text-red-500">×</button></div>`}).join('');notesListDiv.innerHTML=html;document.querySelectorAll('.note-checkbox').forEach(cb=>{cb.addEventListener('change',function(){const noteId=parseInt(this.value);const note=notes.find(n=>n.id===noteId);if(this.checked){if(!selectedNotes.some(n=>n.id===noteId)){selectedNotes.push(note)}}else{selectedNotes=selectedNotes.filter(n=>n.id!==noteId)}}))}
+      window.deleteNote=function(id){if(confirm('Supprimer cette note ?')){notes=notes.filter(n=>n.id!==id);selectedNotes=selectedNotes.filter(n=>n.id!==id);updateNotesDisplay();saveNotes()}}
+      function clearAllNotes(){if(confirm('Supprimer toutes les notes ?')){notes=[];selectedNotes=[];updateNotesDisplay();saveNotes()}}
+      const savedHistory=localStorage.getItem('diceRollerHistory');if(savedHistory){history=JSON.parse(savedHistory);updateHistoryDisplay()}
+      addDiceButton.addEventListener('click',addDiceToRoll);
+      clearRollsButton.addEventListener('click',clearRolls);
+      rollButton.addEventListener('click',rollAllDice);
+      addNoteButton.addEventListener('click',addNote);
+      clearNotesButton.addEventListener('click',clearAllNotes);
+    });
+  </script>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+    import { ARButton } from 'https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js';
+
+    const canvas=document.getElementById('xr-canvas');
+    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,canvas});
+    renderer.setPixelRatio(window.devicePixelRatio||1);
+    renderer.setSize(window.innerWidth,window.innerHeight);
+    renderer.xr.enabled=true;
+
+    const scene=new THREE.Scene();
+    const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.01,20);
+    const hemi=new THREE.HemisphereLight(0xffffff,0x444444,1);
+    scene.add(hemi);
+
+    let hitTestSource=null;
+    let localSpace=null;
+    const reticle=new THREE.Mesh(new THREE.RingGeometry(0.08,0.1,32).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({transparent:true,opacity:0.9}));
+    reticle.matrixAutoUpdate=false;
+    reticle.visible=false;
+    scene.add(reticle);
+
+    const controller=renderer.xr.getController(0);
+    controller.addEventListener('select',()=>{
+      if(!reticle.visible)return;
+      const plate=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.01,0.22),new THREE.MeshStandardMaterial({transparent:true,opacity:0.25}));
+      plate.position.setFromMatrixPosition(reticle.matrix);
+      scene.add(plate);
+    });
+    scene.add(controller);
+
+    function onResize(){camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight)}
+    window.addEventListener('resize',onResize);
+
+    const overlayRoot=document.getElementById('overlay');
+    const enterBtn=document.getElementById('enter-ar');
+
+    const arStart=ARButton.createButton(renderer,{
+      requiredFeatures:['hit-test','dom-overlay'],
+      domOverlay:{root:overlayRoot}
+    });
+    arStart.style.display='none';
+    document.body.appendChild(arStart);
+
+    enterBtn.addEventListener('click',()=>arStart.click());
+
+    renderer.setAnimationLoop((t,frame)=>{
+      if(frame){
+        const session=renderer.xr.getSession();
+        if(!hitTestSource){
+          session.requestReferenceSpace('viewer').then(space=>{
+            session.requestHitTestSource({space}).then(source=>{hitTestSource=source})
+          });
+          session.requestReferenceSpace('local').then(space=>{localSpace=space});
+        }
+        if(hitTestSource&&localSpace){
+          const results=frame.getHitTestResults(hitTestSource);
+          if(results.length){
+            const pose=results[0].getPose(localSpace);
+            reticle.visible=true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+          }else{
+            reticle.visible=false;
+          }
+        }
+      }
+      renderer.render(scene,camera);
+    });
+  </script>
+</body>
+</html>
